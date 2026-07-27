@@ -1,0 +1,53 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chatbot Launcher Test</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    .wrap {
+      max-width: 860px;
+      margin: 48px auto;
+      padding: 0 16px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 8px 24px rgba(2, 6, 23, 0.06);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 24px;
+    }
+    p {
+      margin: 6px 0;
+      line-height: 1.5;
+    }
+    code {
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Chatbot Launcher Test Page</h1>
+      <p>This page is served from <code>http://localhost:5500</code> and loads your latest chatbot launcher script.</p>
+      <p>Expected result: floating chat button appears on bottom-right.</p>
+      <p>If no button appears, open DevTools Network and check <code>loader.js</code>, <code>config</code>, and <code>stream</code> calls.</p>
+    </div>
+  </div>
+
+  <script src="http://localhost:8001/api/v1/chatbot-embed/loader.js?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlZTNiYTA5Zi1jNjI2LTQ4MWUtOTI5OS1kMDVmNTM4MmYyMmEiLCJ0eXBlIjoiY2hhdGJvdF9lbWJlZCIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NTUwMCIsInZlciI6MiwiaWF0IjoxNzczNzMzMzA4LCJleHAiOjE3NzM3NDA1MDh9.bSqri6e092E__x2MNip7eIVx6I3QLHTIolAZ6JN7Fos&embed_origin=http%3A%2F%2Flocalhost%3A5500" async></script>
+</body>
+</html>

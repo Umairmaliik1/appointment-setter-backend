@@ -1,0 +1,174 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  verify-undefined-names:
+    name: Verify Undefined Names
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run undefined-name guard
+        run: |
+          set -e
+          python -m pip install --upgrade pip pyflakes
+          pyflakes app > pyflakes-report.txt || true
+
+          if grep -E "undefined name|import \* used; unable to detect undefined names" pyflakes-report.txt; then
+            echo "Undefined-name safety check failed."
+            cat pyflakes-report.txt
+            exit 1
+          fi
+
+          echo "No undefined-name issues detected."
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: verify-undefined-names
+
+    steps:
+      - name: Deploy to Production VPS
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_VPS_HOST }}
+          username: ${{ secrets.PROD_VPS_USERNAME }}
+          key: ${{ secrets.PROD_VPS_SSH_KEY }}
+          port: ${{ secrets.PROD_VPS_PORT || 22 }}
+          timeout: 30s
+          command_timeout: 30m
+          script: |
+            set -e
+
+            cd ${{ secrets.PROD_VPS_DEPLOY_PATH }}
+
+            echo "Pulling latest code..."
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
+
+            echo "Building Docker images with cache (single build target)..."
+            nice -n 10 docker compose build backend || docker compose build backend
+
+            echo "Starting database services..."
+            docker compose up -d postgres redis
+
+            echo "Waiting for PostgreSQL to become ready..."
+            for i in $(seq 1 30); do
+              if docker compose exec -T postgres pg_isready -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-appointment_setter}" >/dev/null 2>&1; then
+                echo "PostgreSQL is ready."
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "PostgreSQL did not become ready in time."
+                docker compose logs postgres
+                exit 1
+              fi
+              sleep 2
+            done
+
+            echo "Applying database migrations..."
+            for i in $(seq 1 5); do
+              if docker compose run --rm --no-deps --use-aliases backend sh -lc 'python -c "import socket; socket.getaddrinfo(\"postgres\", 5432)" && alembic upgrade head'; then
+                echo "Database migrations applied successfully."
+                break
+              fi
+              if [ "$i" -eq 5 ]; then
+                echo "Database migrations failed after retries."
+                docker compose logs postgres
+                exit 1
+              fi
+              echo "Migration attempt $i failed, retrying..."
+              sleep 3
+            done
+
+            echo "Starting application services..."
+            docker compose up -d --remove-orphans
+
+            echo "Deployment complete. Container status:"
+            docker compose ps
+
+  deploy-development:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev'
+    needs: verify-undefined-names
+
+    steps:
+      - name: Deploy to Development VPS
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEV_VPS_HOST }}
+          username: ${{ secrets.DEV_VPS_USERNAME }}
+          key: ${{ secrets.DEV_VPS_SSH_KEY }}
+          port: ${{ secrets.DEV_VPS_PORT || 22 }}
+          timeout: 30s
+          command_timeout: 60m
+          script: |
+            set -e
+
+            cd ${{ secrets.DEV_VPS_DEPLOY_PATH }}
+
+            echo "Pulling latest code..."
+            git fetch origin dev
+            git checkout dev || git checkout -b dev
+            git reset --hard origin/dev
+
+            echo "Building Docker images with cache (single build target)..."
+            nice -n 10 docker compose build backend || docker compose build backend
+
+            echo "Starting database services..."
+            docker compose up -d postgres redis
+
+            echo "Waiting for PostgreSQL to become ready..."
+            for i in $(seq 1 30); do
+              if docker compose exec -T postgres pg_isready -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-appointment_setter}" >/dev/null 2>&1; then
+                echo "PostgreSQL is ready."
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "PostgreSQL did not become ready in time."
+                docker compose logs postgres
+                exit 1
+              fi
+              sleep 2
+            done
+
+            echo "Applying database migrations..."
+            for i in $(seq 1 5); do
+              if docker compose run --rm --no-deps --use-aliases backend sh -lc 'python -c "import socket; socket.getaddrinfo(\"postgres\", 5432)" && alembic upgrade head'; then
+                echo "Database migrations applied successfully."
+                break
+              fi
+              if [ "$i" -eq 5 ]; then
+                echo "Database migrations failed after retries."
+                docker compose logs postgres
+                exit 1
+              fi
+              echo "Migration attempt $i failed, retrying..."
+              sleep 3
+            done
+
+            echo "Starting application services..."
+            docker compose up -d --remove-orphans
+
+            echo "Deployment complete. Container status:"
+            docker compose ps

@@ -1,0 +1,11 @@
+venv
+__pycache__
+nginx
+env-prod
+.idea*
+firestore-export-*
+*.jsonl
+*.dump
+*.sql
+config.bat
+node_modules

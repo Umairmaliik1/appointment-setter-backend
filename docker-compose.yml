@@ -1,0 +1,277 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: appointment-setter-backend:latest
+    container_name: appointment-setter-backend
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-https://app.samairep.com,http://localhost:3000,https://devapp.samairep.com}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
+
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-appointment_setter}
+
+
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_SIP_DOMAIN: ${LIVEKIT_SIP_DOMAIN}
+
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_WEBHOOK_BASE_URL: ${TWILIO_WEBHOOK_BASE_URL}
+
+      SMS_WEBHOOK_BASE_URL: ${SMS_WEBHOOK_BASE_URL:-${TWILIO_WEBHOOK_BASE_URL}}
+      SMS_DEFAULT_THROTTLE_PER_MIN: ${SMS_DEFAULT_THROTTLE_PER_MIN:-60}
+
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_SERVER: ${MAIL_SERVER}
+      MAIL_STARTTLS: ${MAIL_STARTTLS}
+      MAIL_SSL_TLS: ${MAIL_SSL_TLS}
+      USE_CREDENTIALS: ${USE_CREDENTIALS}
+      VALIDATE_CERTS: ${VALIDATE_CERTS}
+
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
+
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
+
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS}
+
+    env_file:
+      - .env
+
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./app/static:/app/app/static:ro
+
+    networks:
+      - app-network
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+    # Backend runs FastAPI server, not LiveKit worker
+    entrypoint: []
+    # --forwarded-allow-ips: trust X-Forwarded-* from the host reverse proxy
+    # (requests arrive from the Docker bridge gateway, e.g. 172.18.0.x, which is
+    # NOT in uvicorn's default trust list of 127.0.0.1). Without this, uvicorn
+    # ignores X-Forwarded-Proto/Host, so request.url is rebuilt as http://<internal>
+    # and Twilio webhook signature validation fails (403 -> caller hears
+    # "an application error has occurred"). The proxy MUST send X-Forwarded-Proto
+    # and X-Forwarded-Host for this to resolve to the correct public https URL.
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: appointment-setter-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis-data:/data
+
+    networks:
+      - app-network
+
+    command: redis-server --appendonly yes
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: appointment-setter-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-appointment_setter}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-appointment_setter}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  voice-worker:
+    image: appointment-setter-backend:latest
+    # Do not pin container_name so this service can be scaled horizontally:
+    # docker compose up -d --scale voice-worker=3
+    restart: unless-stopped
+
+    # Required: inference subprocess runs as root
+    user: root
+
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-appointment_setter}
+
+
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_SIP_DOMAIN: ${LIVEKIT_SIP_DOMAIN}
+
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_WEBHOOK_BASE_URL: ${TWILIO_WEBHOOK_BASE_URL}
+
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL}
+
+      SECRET_KEY: ${SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
+
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS}
+
+      # Numerical library thread caps for predictable worker CPU usage.
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      VECLIB_MAXIMUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+
+    volumes:
+      - ./.env:/app/.env:ro
+
+    networks:
+      - app-network
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+    entrypoint: []
+    command: ["python", "run_voice_worker.py", "start"]
+
+    # -------------------------------------------------------------------
+    # Resource sizing. Limits cap a runaway worker; reservations guarantee
+    # enough CPU/RAM for concurrent Gemini Live sessions.
+    # Honored by `docker compose up` (Compose v2) without Swarm.
+    # https://docs.livekit.io/deploy/custom/deployments/
+    # -------------------------------------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
+        reservations:
+          cpus: "2.0"
+          memory: 4G
+
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f run_voice_worker.py || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Generous so first-boot model/process prewarm never trips the check.
+      start_period: 90s
+
+  sms-worker:
+    image: appointment-setter-backend:latest
+    # Scale horizontally with: docker compose up -d --scale sms-worker=3
+    # FOR UPDATE SKIP LOCKED guarantees no double-send across replicas.
+    restart: unless-stopped
+
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-appointment_setter}
+
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_WEBHOOK_BASE_URL: ${TWILIO_WEBHOOK_BASE_URL}
+      SMS_WEBHOOK_BASE_URL: ${SMS_WEBHOOK_BASE_URL:-${TWILIO_WEBHOOK_BASE_URL}}
+      SMS_DEFAULT_THROTTLE_PER_MIN: ${SMS_DEFAULT_THROTTLE_PER_MIN:-60}
+      SMS_WORKER_BATCH_SIZE: ${SMS_WORKER_BATCH_SIZE:-50}
+
+      SECRET_KEY: ${SECRET_KEY}
+
+    env_file:
+      - .env
+
+    volumes:
+      - ./.env:/app/.env:ro
+
+    networks:
+      - app-network
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+    entrypoint: []
+    command: ["python", "run_sms_worker.py", "start"]
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f run_sms_worker.py || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+  postgres-data:
