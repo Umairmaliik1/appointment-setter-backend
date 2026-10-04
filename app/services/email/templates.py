@@ -379,7 +379,7 @@ class EmailTemplates:
 
     @staticmethod
     def partner_owner_invite(data: Dict[str, Any]) -> Tuple[str, str]:
-        subject = f"Welcome to {data.get('platform_name', 'ShipStack Voice')} - Set Your Password"
+        subject = f"Welcome to {data.get('platform_name', 'Bookhatch AI')} - Set Your Password"
         content = f"""
             <p>Hello {_esc(data.get('owner_name', 'there'))},</p>
             <p>Your partner workspace <strong>{_esc(data.get('partner_name', 'Partner'))}</strong> is ready.</p>
@@ -407,7 +407,7 @@ class EmailTemplates:
 
     @staticmethod
     def user_setup_invite(data: Dict[str, Any]) -> Tuple[str, str]:
-        subject = f"Welcome to {data.get('platform_name', 'ShipStack Voice')} - Activate Your Account"
+        subject = f"Welcome to {data.get('platform_name', 'Bookhatch AI')} - Activate Your Account"
         content = f"""
             <p>Hello {_esc(data.get('recipient_name', 'there'))},</p>
             <p>You were added to <strong>{_esc(data.get('workspace_name', 'your workspace'))}</strong>.</p>
@@ -434,7 +434,7 @@ class EmailTemplates:
 
     @staticmethod
     def password_reset(data: Dict[str, Any]) -> Tuple[str, str]:
-        subject = f"{data.get('platform_name', 'ShipStack Voice')} Password Reset"
+        subject = f"{data.get('platform_name', 'Bookhatch AI')} Password Reset"
         content = f"""
             <p>Hello {_esc(data.get('recipient_name', 'there'))},</p>
             <p>We received a request to reset your password.</p>

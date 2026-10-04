@@ -1,5 +1,5 @@
 """
-Core configuration settings for the ShipStack Voice SaaS platform.
+Core configuration settings for the Bookhatch AI platform.
 """
 
 import os
@@ -151,8 +151,8 @@ CHATBOT_DEV_ALLOW_ANY_ORIGIN = os.environ.get("CHATBOT_DEV_ALLOW_ANY_ORIGIN", "f
 CHATBOT_ALLOW_ANY_ORIGIN = os.environ.get("CHATBOT_ALLOW_ANY_ORIGIN", os.environ.get("CHATBOT_DEV_ALLOW_ANY_ORIGIN", "false")).lower() == "true"
 CHATBOT_RUNTIME_ENABLED = os.environ.get("CHATBOT_RUNTIME_ENABLED", "true").lower() == "true"
 
-# ShipStack Voice platform branding defaults
-PLATFORM_BRAND_NAME = os.environ.get("PLATFORM_BRAND_NAME", "ShipStack Voice")
+# Bookhatch AI platform branding defaults
+PLATFORM_BRAND_NAME = os.environ.get("PLATFORM_BRAND_NAME", "Bookhatch AI")
 PLATFORM_BRAND_LOGO_URL = os.environ.get("PLATFORM_BRAND_LOGO_URL", "")
 PLATFORM_BRAND_PRIMARY_COLOR = os.environ.get("PLATFORM_BRAND_PRIMARY_COLOR", "#0f172a")
 PLATFORM_BRAND_SECONDARY_COLOR = os.environ.get("PLATFORM_BRAND_SECONDARY_COLOR", "#ffffff")

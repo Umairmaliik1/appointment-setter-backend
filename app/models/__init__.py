@@ -1,3 +1,3 @@
 """
-Models package for the ShipStack Voice application.
+Models package for the Bookhatch AI application.
 """

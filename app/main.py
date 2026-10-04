@@ -51,7 +51,7 @@ logging.getLogger("passlib").setLevel(logging.ERROR)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
-    logger.info("Starting ShipStack Voice API server...")
+    logger.info("Starting Bookhatch AI API server...")
     logger.info(f"Environment: {ENVIRONMENT}")
     logger.info(f"Debug mode: {DEBUG}")
     logger.info("CORS allowed origins: %s", ", ".join(cors_origins))
@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
-    logger.info("Shutting down ShipStack Voice API server...")
+    logger.info("Shutting down Bookhatch AI API server...")
 
 
 # Create FastAPI app
@@ -107,8 +107,8 @@ async def lifespan(app: FastAPI):
 # trailing slashes with 301 responses that lack CORS headers.
 # Our TrailingSlashMiddleware handles normalization instead (rewrites paths, no redirects)
 app = FastAPI(
-    title="ShipStack Voice API",
-    description="Autonomous Voice AI & Appointment Platform by ShipStack AI",
+    title="Bookhatch AI API",
+    description="Autonomous Voice AI & Appointment Platform: Every call answered, Every job booked. Built by DAU Labs",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs" if DEBUG else None,
@@ -155,7 +155,7 @@ app.include_router(api_router)
 @app.get("/")
 async def root():
     """Root endpoint."""
-    return {"message": "ShipStack Voice API", "version": "1.0.0"}
+    return {"message": "Bookhatch AI API", "version": "1.0.0"}
 
 
 # Handle Starlette HTTPException (including 404 Not Found)

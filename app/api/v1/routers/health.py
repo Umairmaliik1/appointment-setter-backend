@@ -30,7 +30,7 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "service": "ShipStack Voice API",
+        "service": "Bookhatch AI API",
         "version": "1.0.0",
         "environment": ENVIRONMENT,
     }
@@ -46,7 +46,7 @@ async def detailed_health_check() -> Dict[str, Any]:
     health_status = {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "service": "ShipStack Voice API",
+        "service": "Bookhatch AI API",
         "version": "1.0.0",
         "environment": ENVIRONMENT,
         "components": {},

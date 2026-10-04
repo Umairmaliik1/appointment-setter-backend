@@ -61,7 +61,7 @@ class EmailService:
             )
             effective_from = email_settings.MAIL_USERNAME
 
-        effective_from = (effective_from or "").strip() or "noreply@shipstack.ai"
+        effective_from = (effective_from or "").strip() or "noreply@bookhatch.ai"
         self._from_email = effective_from
 
         self.conf = ConnectionConfig(
@@ -142,7 +142,7 @@ class EmailService:
                 "service_address": service_address,
                 "appointment_id": appointment_id or "N/A",
                 "service_details": service_details,
-                "business_name": business_name or "ShipStack Voice",
+                "business_name": business_name or "Bookhatch AI",
             }
             subject, html = EmailTemplates.appointment_confirmation(data)
             await self._send(subject, [customer_email], html)
@@ -172,7 +172,7 @@ class EmailService:
                 "service_address": service_address,
                 "appointment_id": appointment_id or "N/A",
                 "service_details": service_details,
-                "business_name": business_name or "ShipStack Voice",
+                "business_name": business_name or "Bookhatch AI",
             }
             subject, html = EmailTemplates.appointment_owner_notification(data)
             await self._send(subject, [owner_email], html)
@@ -198,7 +198,7 @@ class EmailService:
                 "old_status": "scheduled",
                 "new_status": "cancelled",
                 "appointment_id": "N/A",
-                "business_name": business_name or "ShipStack Voice",
+                "business_name": business_name or "Bookhatch AI",
                 "cancellation_reason": reason,
             }
             subject, html = EmailTemplates.appointment_status_update(data)
@@ -228,7 +228,7 @@ class EmailService:
                 "new_datetime": new_datetime.strftime("%B %d, %Y at %I:%M %p"),
                 "service_address": service_address or "N/A",
                 "appointment_id": appointment_id or "N/A",
-                "business_name": business_name or "ShipStack Voice",
+                "business_name": business_name or "Bookhatch AI",
                 "reschedule_reason": reason,
             }
             subject, html = EmailTemplates.appointment_reschedule(data)
@@ -247,7 +247,7 @@ class EmailService:
         setup_password_url: str,
         login_url: str,
         expires_in_hours: int = 48,
-        platform_name: str = "ShipStack Voice",
+        platform_name: str = "Bookhatch AI",
     ) -> bool:
         """Onboarding invite for a new partner owner."""
         try:
@@ -277,7 +277,7 @@ class EmailService:
         setup_password_url: str,
         login_url: str,
         expires_in_hours: int = 48,
-        platform_name: str = "ShipStack Voice",
+        platform_name: str = "Bookhatch AI",
     ) -> bool:
         """Setup invite for a newly onboarded workspace user."""
         try:
@@ -324,7 +324,7 @@ class EmailService:
         recipient_name: str,
         reset_password_url: str,
         expires_in_minutes: int = 60,
-        platform_name: str = "ShipStack Voice",
+        platform_name: str = "Bookhatch AI",
     ) -> bool:
         """Password reset email."""
         try:

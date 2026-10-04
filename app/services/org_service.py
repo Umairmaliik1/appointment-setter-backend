@@ -17,8 +17,8 @@ from app.core.config import (
 )
 from app.services.postgres_store import postgres_store
 
-PLATFORM_ORG_ID = "shipstack-platform"
-LEGACY_PLATFORM_ORG_ID = "mindrind-platform"
+PLATFORM_ORG_ID = "bookhatch-platform"
+LEGACY_PLATFORM_ORG_IDS = ("shipstack-platform", "mindrind-platform")
 PLATFORM_ROLES = {"platform_owner", "platform_staff", "admin"}
 PARTNER_ROLES = {"partner_owner", "partner_admin", "partner_staff"}
 CUSTOMER_ROLES = {"customer_owner", "customer_staff"}
@@ -47,7 +47,10 @@ class OrgService:
     async def ensure_platform_org_exists(self) -> Dict[str, Any]:
         org = await postgres_store.get_org(PLATFORM_ORG_ID)
         if not org:
-            org = await postgres_store.get_org(LEGACY_PLATFORM_ORG_ID)
+            for legacy_id in LEGACY_PLATFORM_ORG_IDS:
+                org = await postgres_store.get_org(legacy_id)
+                if org:
+                    break
         if org:
             return org
         payload = {
@@ -154,7 +157,7 @@ class OrgService:
             active_org = None
             active_org_id = user.get("active_org_id")
             if platform_scope:
-                active_org = next((org for org in sorted_orgs if str(org.get("id", "")) in (PLATFORM_ORG_ID, LEGACY_PLATFORM_ORG_ID)), None)
+                active_org = next((org for org in sorted_orgs if str(org.get("id", "")) in (PLATFORM_ORG_ID, *LEGACY_PLATFORM_ORG_IDS)), None)
             if not active_org and isinstance(active_org_id, str):
                 active_org = next((org for org in sorted_orgs if str(org.get("id", "")) == active_org_id), None)
             if not active_org and sorted_orgs:

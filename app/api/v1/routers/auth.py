@@ -600,7 +600,7 @@ async def forgot_password(forgot_data: ForgotPasswordRequest, request: Request):
                     recipient_name=recipient_name,
                     reset_password_url=reset_password_url,
                     expires_in_minutes=60,
-                    platform_name="ShipStack Voice",
+                    platform_name="Bookhatch AI",
                 )
         # Do not reveal whether an account exists for security.
         return {"message": "If your email exists, a password reset link has been sent."}

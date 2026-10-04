@@ -521,7 +521,7 @@ async def create_partner_with_owner(
                 setup_password_url=setup_password_url,
                 login_url=login_url,
                 expires_in_hours=48,
-                platform_name="ShipStack Voice",
+                platform_name="Bookhatch AI",
             )
 
         response_payload = {
@@ -838,7 +838,7 @@ async def create_org_member(
             setup_password_url=setup_password_url,
             login_url=login_url,
             expires_in_hours=48,
-            platform_name="ShipStack Voice",
+            platform_name="Bookhatch AI",
         )
     created_record = await postgres_store.get_org_membership(org_id=org_id, user_id=str(new_user["id"]))
     if created_record:
@@ -893,7 +893,7 @@ async def resend_org_member_setup_invite(
         setup_password_url=setup_password_url,
         login_url=login_url,
         expires_in_hours=48,
-        platform_name="ShipStack Voice",
+        platform_name="Bookhatch AI",
     )
     await audit_service.log_event(
         actor=current_user,
@@ -922,7 +922,7 @@ async def update_partner_entitlements(
     payload: PartnerEntitlementsUpdateRequest,
     current_user: Dict[str, Any] = Depends(get_current_user_from_token),
 ):
-    """ShipStack entitlements update for partner app."""
+    """Bookhatch AI entitlements update for partner app."""
     if not _is_platform_staff(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only platform staff can update partner entitlements")
 

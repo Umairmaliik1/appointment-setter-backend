@@ -309,7 +309,7 @@ def _org_summary(org: Dict[str, Any]) -> PlatformOrgSummaryResponse:
 
 def _compute_branding(active_org: Optional[Dict[str, Any]], partner_org: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     fallback = {
-        "brand_name": "ShipStack Voice",
+        "brand_name": "Bookhatch AI",
         "logo_url": None,
         "primary_color": "#0f172a",
         "secondary_color": "#ffffff",
@@ -832,7 +832,7 @@ async def set_active_org(
     if org_service.is_platform_staff(memberships) and payload.org_id != PLATFORM_ORG_ID:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Platform admins are fixed to ShipStack org context",
+            detail="Platform admins are fixed to Bookhatch org context",
         )
 
     has_access = await org_service.user_can_access_org(current_user, payload.org_id)

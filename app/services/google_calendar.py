@@ -297,7 +297,7 @@ class GoogleCalendarService:
             f"Phone: {customer_phone}\n"
             f"Email: {customer_email}\n"
             f"Details: {service_details}\n\n"
-            "Booked by ShipStack Voice"
+            "Booked by Bookhatch AI"
         )
 
         event_payload = {
@@ -402,7 +402,7 @@ class GoogleCalendarService:
                 f"Phone: {customer_phone}\n"
                 f"Email: {customer_email}\n"
                 f"Details: {service_details}\n\n"
-                "Booked by ShipStack Voice"
+                "Booked by Bookhatch AI"
             ),
             "start": {
                 "dateTime": start_local.isoformat(),
@@ -581,13 +581,13 @@ class GoogleCalendarService:
             if owner_email:
                 await self.email_service.send_email(
                     recipient=owner_email,
-                    subject="Action Required: Reconnect your Google Calendar - ShipStack Voice",
+                    subject="Action Required: Reconnect your Google Calendar - Bookhatch AI",
                     body=(
                         "Hello,\n\n"
-                        "Your Google Calendar connection for ShipStack Voice needs to be reconnected.\n"
+                        "Your Google Calendar connection for Bookhatch AI needs to be reconnected.\n"
                         "Please sign in to your dashboard, navigate to Settings > Google Calendar, "
                         "and click Reconnect to continue syncing appointments.\n\n"
-                        "- ShipStack Voice Team"
+                        "- Bookhatch AI Team"
                     ),
                 )
         except Exception as exc:
@@ -605,13 +605,13 @@ class GoogleCalendarService:
                 apt_time = appointment.get("appointment_datetime", "unknown time")
                 await self.email_service.send_email(
                     recipient=owner_email,
-                    subject="Google Calendar Sync Notice - ShipStack Voice",
+                    subject="Google Calendar Sync Notice - Bookhatch AI",
                     body=(
                         "Hello,\n\n"
                         f"An appointment for {customer_name} scheduled at {apt_time} was booked successfully "
-                        "in ShipStack Voice, but could not be synced to Google Calendar.\n\n"
+                        "in Bookhatch AI, but could not be synced to Google Calendar.\n\n"
                         "The booking is safely recorded in your dashboard.\n\n"
-                        "- ShipStack Voice Team"
+                        "- Bookhatch AI Team"
                     ),
                 )
         except Exception as exc:

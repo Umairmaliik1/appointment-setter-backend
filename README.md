@@ -1,6 +1,6 @@
-# ShipStack Voice - Autonomous Voice AI & Appointment Platform
+# Bookhatch AI - Autonomous Voice AI & Appointment Platform
 
-> **Engineered by ShipStack AI**  
+> **Every call answered, Every job booked. Built by DAU Labs**  
 > Real-time conversational voice agents, automated phone scheduling, and multi-tenant operational infrastructure.
 
 ---
@@ -218,7 +218,7 @@ PLATFORM_APP_BASE_URL=http://localhost:3000
 
 ### Google Calendar Sync Setup
 
-ShipStack Voice integrates with Google Calendar to provide real-time availability checks, automatic event creation with deterministic idempotent IDs, and resilient background synchronization.
+Bookhatch AI integrates with Google Calendar to provide real-time availability checks, automatic event creation with deterministic idempotent IDs, and resilient background synchronization.
 
 #### 1. Google Cloud Console Configuration
 1. Go to [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials**.
