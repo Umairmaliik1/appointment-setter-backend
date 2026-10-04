@@ -1,5 +1,5 @@
 """
-Core configuration settings for the AI Phone Scheduler SaaS platform.
+Core configuration settings for the ShipStack Voice SaaS platform.
 """
 
 import os
@@ -84,6 +84,12 @@ SMS_START_KEYWORDS = {
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
+# Google Calendar OAuth & Sync settings
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_REDIRECT_URI = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI", "")
+CALENDAR_SYNC_ENABLED = os.environ.get("CALENDAR_SYNC_ENABLED", "false").lower() in ("true", "1", "t")
+
 
 # Email Settings — SMTP via fastapi_mail (see app/services/email/service.py).
 class EmailSettings:
@@ -145,11 +151,11 @@ CHATBOT_DEV_ALLOW_ANY_ORIGIN = os.environ.get("CHATBOT_DEV_ALLOW_ANY_ORIGIN", "f
 CHATBOT_ALLOW_ANY_ORIGIN = os.environ.get("CHATBOT_ALLOW_ANY_ORIGIN", os.environ.get("CHATBOT_DEV_ALLOW_ANY_ORIGIN", "false")).lower() == "true"
 CHATBOT_RUNTIME_ENABLED = os.environ.get("CHATBOT_RUNTIME_ENABLED", "true").lower() == "true"
 
-# MindRind platform branding defaults
-PLATFORM_BRAND_NAME = os.environ.get("PLATFORM_BRAND_NAME", "MindRind")
+# ShipStack Voice platform branding defaults
+PLATFORM_BRAND_NAME = os.environ.get("PLATFORM_BRAND_NAME", "ShipStack Voice")
 PLATFORM_BRAND_LOGO_URL = os.environ.get("PLATFORM_BRAND_LOGO_URL", "")
 PLATFORM_BRAND_PRIMARY_COLOR = os.environ.get("PLATFORM_BRAND_PRIMARY_COLOR", "#0f172a")
 PLATFORM_BRAND_SECONDARY_COLOR = os.environ.get("PLATFORM_BRAND_SECONDARY_COLOR", "#ffffff")
-PLATFORM_BRAND_ACCENT_COLOR = os.environ.get("PLATFORM_BRAND_ACCENT_COLOR", "#f59e0b")
+PLATFORM_BRAND_ACCENT_COLOR = os.environ.get("PLATFORM_BRAND_ACCENT_COLOR", "#6366f1")
 PLATFORM_APP_BASE_URL = os.environ.get("PLATFORM_APP_BASE_URL", "http://localhost:3000")
 

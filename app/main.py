@@ -2,9 +2,11 @@
 Main FastAPI application.
 """
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, Request, status
@@ -14,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.api import api_router
-from app.core.config import API_HOST, API_PORT, DEBUG, ENVIRONMENT, LOG_LEVEL
+from app.core.config import API_HOST, API_PORT, CALENDAR_SYNC_ENABLED, DEBUG, ENVIRONMENT, LOG_LEVEL
 from app.core.cors import get_cors_settings
 from app.core.env_validator import print_environment_summary, validate_environment_variables
 from app.core.exceptions import (
@@ -49,7 +51,7 @@ logging.getLogger("passlib").setLevel(logging.ERROR)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
-    logger.info("Starting AI Phone Scheduler API server...")
+    logger.info("Starting ShipStack Voice API server...")
     logger.info(f"Environment: {ENVIRONMENT}")
     logger.info(f"Debug mode: {DEBUG}")
     logger.info("CORS allowed origins: %s", ", ".join(cors_origins))
@@ -73,10 +75,31 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"PostgreSQL warmup skipped: {e}")
 
+    # Start calendar sync sweeper if enabled
+    sweeper_task: Optional[asyncio.Task] = None
+    if CALENDAR_SYNC_ENABLED:
+        try:
+            from app.services.google_calendar import google_calendar_service
+
+            sweeper_task = asyncio.create_task(
+                google_calendar_service.run_calendar_sync_sweeper(interval_seconds=60.0)
+            )
+            logger.info("Google Calendar sync sweeper background task started.")
+        except Exception as e:
+            logger.warning(f"Failed to start calendar sync sweeper: {e}")
+
     yield
 
     # Shutdown
-    logger.info("Shutting down AI Phone Scheduler API server...")
+    if sweeper_task and not sweeper_task.done():
+        logger.info("Stopping Google Calendar sync sweeper...")
+        sweeper_task.cancel()
+        try:
+            await sweeper_task
+        except asyncio.CancelledError:
+            pass
+
+    logger.info("Shutting down ShipStack Voice API server...")
 
 
 # Create FastAPI app
@@ -84,8 +107,8 @@ async def lifespan(app: FastAPI):
 # trailing slashes with 301 responses that lack CORS headers.
 # Our TrailingSlashMiddleware handles normalization instead (rewrites paths, no redirects)
 app = FastAPI(
-    title="AI Phone Scheduler API",
-    description="SaaS platform for AI-powered phone appointment scheduling",
+    title="ShipStack Voice API",
+    description="Autonomous Voice AI & Appointment Platform by ShipStack AI",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs" if DEBUG else None,
@@ -132,7 +155,7 @@ app.include_router(api_router)
 @app.get("/")
 async def root():
     """Root endpoint."""
-    return {"message": "AI Phone Scheduler API", "version": "1.0.0"}
+    return {"message": "ShipStack Voice API", "version": "1.0.0"}
 
 
 # Handle Starlette HTTPException (including 404 Not Found)

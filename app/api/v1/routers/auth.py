@@ -593,14 +593,14 @@ async def forgot_password(forgot_data: ForgotPasswordRequest, request: Request):
             if user_id:
                 token = auth_service.create_password_reset_token(user_id=user_id, expires_minutes=60)
                 base_url = (PLATFORM_APP_BASE_URL or "").strip().rstrip("/") or "http://localhost:3000"
-                reset_password_url = f"{base_url}/mindrind/admin/reset-password?token={token}"
+                reset_password_url = f"{base_url}/reset-password?token={token}"
                 recipient_name = f"{str(user.get('first_name', '')).strip()} {str(user.get('last_name', '')).strip()}".strip() or "there"
                 await email_service.send_password_reset_email(
                     recipient_email=str(user.get("email", "")),
                     recipient_name=recipient_name,
                     reset_password_url=reset_password_url,
                     expires_in_minutes=60,
-                    platform_name="MindRind",
+                    platform_name="ShipStack Voice",
                 )
         # Do not reveal whether an account exists for security.
         return {"message": "If your email exists, a password reset link has been sent."}

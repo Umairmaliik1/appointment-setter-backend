@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +17,7 @@ from app.services.postgres_models import (
     AppointmentDomainModel,
     AuditLogModel,
     BusinessConfigModel,
+    CalendarConnectionModel,
     ChatbotAgentModel,
     ChatbotChatMessageModel,
     ChatbotChatSessionModel,
@@ -94,6 +96,23 @@ def _membership_to_dict(row: OrgMembershipModel) -> Dict[str, Any]:
         "user_id": row.user_id,
         "role": row.role,
         "status": row.status,
+        "created_at": _iso(row.created_at),
+        "updated_at": _iso(row.updated_at),
+    }
+
+
+def _calendar_connection_to_dict(row: CalendarConnectionModel) -> Dict[str, Any]:
+    return {
+        "id": row.id,
+        "tenant_id": row.tenant_id,
+        "provider": row.provider,
+        "account_email": row.account_email,
+        "calendar_id": row.calendar_id,
+        "refresh_token_enc": row.refresh_token_enc,
+        "scopes": row.scopes or [],
+        "timezone": row.timezone,
+        "status": row.status,
+        "last_sync_at": _iso(row.last_sync_at),
         "created_at": _iso(row.created_at),
         "updated_at": _iso(row.updated_at),
     }
@@ -959,6 +978,30 @@ class PostgresStore:
             session.refresh(row)
             return _merge_payload(row.data, {"id": row.id, "tenant_id": row.tenant_id, "status": row.status, "appointment_datetime": row.appointment_datetime, "created_at": _iso(row.created_at), "updated_at": _iso(row.updated_at)})
 
+    async def list_pending_calendar_sync_appointments(self, limit: int = 50) -> List[Dict[str, Any]]:
+        with session_scope() as session:
+            stmt = (
+                select(AppointmentDomainModel)
+                .where(AppointmentDomainModel.data["calendar_sync_status"].astext == "pending")
+                .order_by(AppointmentDomainModel.created_at.asc())
+                .limit(limit)
+            )
+            rows = session.scalars(stmt).all()
+            return [
+                _merge_payload(
+                    row.data,
+                    {
+                        "id": row.id,
+                        "tenant_id": row.tenant_id,
+                        "status": row.status,
+                        "appointment_datetime": row.appointment_datetime,
+                        "created_at": _iso(row.created_at),
+                        "updated_at": _iso(row.updated_at),
+                    },
+                )
+                for row in rows
+            ]
+
     async def create_provisioning_job(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
         with session_scope() as session:
             row = ProvisioningJobModel(
@@ -1728,6 +1771,80 @@ class PostgresStore:
                 .limit(limit)
             ).all()
             return [_sms_suppression_to_dict(row) for row in rows]
+
+    async def get_calendar_connection(self, tenant_id: str) -> Optional[Dict[str, Any]]:
+        with session_scope() as session:
+            row = session.scalar(
+                select(CalendarConnectionModel).where(CalendarConnectionModel.tenant_id == tenant_id).limit(1)
+            )
+            return _calendar_connection_to_dict(row) if row else None
+
+    async def upsert_calendar_connection(self, connection_data: Dict[str, Any]) -> Dict[str, Any]:
+        tenant_id = str(connection_data["tenant_id"])
+        with session_scope() as session:
+            row = session.scalar(
+                select(CalendarConnectionModel).where(CalendarConnectionModel.tenant_id == tenant_id).limit(1)
+            )
+            if row is None:
+                row = CalendarConnectionModel(
+                    id=connection_data.get("id") or str(uuid.uuid4()),
+                    tenant_id=tenant_id,
+                    provider=connection_data.get("provider", "google"),
+                    account_email=connection_data["account_email"],
+                    calendar_id=connection_data.get("calendar_id", "primary"),
+                    refresh_token_enc=connection_data["refresh_token_enc"],
+                    scopes=connection_data.get("scopes", []),
+                    timezone=connection_data.get("timezone", "UTC"),
+                    status=connection_data.get("status", "active"),
+                    last_sync_at=connection_data.get("last_sync_at"),
+                )
+                session.add(row)
+            else:
+                if "account_email" in connection_data:
+                    row.account_email = connection_data["account_email"]
+                if "calendar_id" in connection_data:
+                    row.calendar_id = connection_data["calendar_id"]
+                if "refresh_token_enc" in connection_data:
+                    row.refresh_token_enc = connection_data["refresh_token_enc"]
+                if "scopes" in connection_data:
+                    row.scopes = connection_data["scopes"]
+                if "timezone" in connection_data:
+                    row.timezone = connection_data["timezone"]
+                if "status" in connection_data:
+                    row.status = connection_data["status"]
+                if "last_sync_at" in connection_data:
+                    row.last_sync_at = connection_data["last_sync_at"]
+                row.updated_at = self._now()
+            session.flush()
+            session.refresh(row)
+            return _calendar_connection_to_dict(row)
+
+    async def update_calendar_connection_status(
+        self, tenant_id: str, status: str, last_sync_at: Optional[datetime] = None
+    ) -> Optional[Dict[str, Any]]:
+        with session_scope() as session:
+            row = session.scalar(
+                select(CalendarConnectionModel).where(CalendarConnectionModel.tenant_id == tenant_id).limit(1)
+            )
+            if not row:
+                return None
+            row.status = status
+            if last_sync_at is not None:
+                row.last_sync_at = last_sync_at
+            row.updated_at = self._now()
+            session.flush()
+            session.refresh(row)
+            return _calendar_connection_to_dict(row)
+
+    async def delete_calendar_connection(self, tenant_id: str) -> bool:
+        with session_scope() as session:
+            row = session.scalar(
+                select(CalendarConnectionModel).where(CalendarConnectionModel.tenant_id == tenant_id).limit(1)
+            )
+            if not row:
+                return False
+            session.delete(row)
+            return True
 
 
 postgres_store = PostgresStore()

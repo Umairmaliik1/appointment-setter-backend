@@ -8,6 +8,7 @@ from app.api.v1.routers import (
     agents,
     appointments,
     auth,
+    calendar,
     chatbot_agents,
     chatbot_embed,
     contacts,
@@ -28,6 +29,7 @@ api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(platform.router)
 api_router.include_router(tenants.router)
+api_router.include_router(calendar.router)
 api_router.include_router(agents.router)
 api_router.include_router(phone_numbers.router)
 api_router.include_router(telephony.router)

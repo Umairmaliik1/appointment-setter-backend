@@ -83,9 +83,9 @@ class TenantService:
             return
 
         await org_service.ensure_platform_org_exists()
-        platform_org_id = "mindrind-platform"
-        partner_org_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"mindrind:partner:{tenant_id}"))
-        customer_org_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"mindrind:customer:{tenant_id}"))
+        platform_org_id = "shipstack-platform"
+        partner_org_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"shipstack:partner:{tenant_id}"))
+        customer_org_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"shipstack:customer:{tenant_id}"))
 
         partner_org = await store.get_org(partner_org_id)
         if not partner_org:

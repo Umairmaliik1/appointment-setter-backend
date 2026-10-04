@@ -485,3 +485,25 @@ class SmsSuppressionModel(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class CalendarConnectionModel(Base):
+    """Per-tenant calendar connection (e.g. Google Calendar OAuth)."""
+
+    __tablename__ = "calendar_connections"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="google")
+    account_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    calendar_id: Mapped[str] = mapped_column(String(255), nullable=False, default="primary")
+    refresh_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+

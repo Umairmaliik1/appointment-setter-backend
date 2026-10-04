@@ -1,12 +1,16 @@
-# AI Phone Scheduler - Appointment Setter
+# ShipStack Voice - Autonomous Voice AI & Appointment Platform
 
+> **Engineered by ShipStack AI**  
+> Real-time conversational voice agents, automated phone scheduling, and multi-tenant operational infrastructure.
 
+---
 
 ## 🚀 Features
 
 ### Core Capabilities
 - **AI Voice Agents**: Powered by LiveKit Agents running Google's Gemini Live native-audio model (single-model VAD + STT + LLM + TTS)
 - **Phone Call Operation**: Twilio SIP integration for real inbound calls
+- **Google Calendar Sync**: Multi-tenant OAuth sync with Google Calendar. Voice agent queries real-time availability via `check_availability`, pushes bookings with deterministic idempotent event IDs, handles reschedules/cancellations, and features an automated background restart sweeper.
 - **Multi-Tenant Architecture**: Complete tenant isolation with dedicated configurations
 - **Appointment Management**: Full CRUD operations with scheduling and slot management
 - **Real-time Communication**: WebSocket-based voice interactions via LiveKit
@@ -203,22 +207,35 @@ AWS_REGION=us-east-1
 JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
 JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# Google Calendar OAuth & Sync
+GOOGLE_OAUTH_CLIENT_ID=your_google_oauth_client_id_here
+GOOGLE_OAUTH_CLIENT_SECRET=your_google_oauth_client_secret_here
+GOOGLE_OAUTH_REDIRECT_URI=https://your-api-domain.com/api/v1/calendar/google/callback
+CALENDAR_SYNC_ENABLED=true
+PLATFORM_APP_BASE_URL=http://localhost:3000
 ```
 
-### PostgreSQL Service Account Setup
+### Google Calendar Sync Setup
 
-1. Go to PostgreSQL Console → Project Settings → Service Accounts
-2. Generate new private key (downloads JSON file)
-3. Extract values for `.env`:
-   ```json
-   {
-     "project_id": "your-project-id",
-     "private_key": "-----BEGIN PRIVATE KEY-----\n...",
-     "client_email": "your-service-account@..."
-   }
-   ```
+ShipStack Voice integrates with Google Calendar to provide real-time availability checks, automatic event creation with deterministic idempotent IDs, and resilient background synchronization.
 
----
+#### 1. Google Cloud Console Configuration
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials**.
+2. Create an **OAuth 2.0 Client ID** (Web application).
+3. Set **Authorized redirect URIs** to match `GOOGLE_OAUTH_REDIRECT_URI` (e.g., `https://your-api-domain.com/api/v1/calendar/google/callback` or `http://localhost:8000/api/v1/calendar/google/callback`).
+4. Enable the **Google Calendar API** in API Library.
+5. Scopes used:
+   - `https://www.googleapis.com/auth/calendar.freebusy` (query busy times)
+   - `https://www.googleapis.com/auth/calendar.events.owned` (manage booking events)
+   - `https://www.googleapis.com/auth/userinfo.email` (read connected account email)
+
+#### 2. Architecture & Reliability Highlights
+- **Conversational Availability Tool**: The voice agent uses `check_availability(date, part_of_day)` which calculates available times by intersecting business working hours, internal booked appointments, and Google Calendar `freeBusy` intervals (cached for 60s for low latency).
+- **Fresh Booking Check**: When a caller selects a time, `validate_appointment_time` executes with `skip_cache=True` against Google Calendar to avoid race-condition double bookings.
+- **Canonical Datetimes**: All stored appointments are normalized to canonical UTC ISO strings with `Z` (e.g. `2026-10-15T15:00:00Z`).
+- **Deterministic Idempotency**: Event IDs are derived deterministically from the appointment ID, treating HTTP 409 Conflict as success.
+- **Restart Recovery Sweeper**: If the server restarts during a sync, appointments marked `calendar_sync_status: "pending"` are automatically retried by the background sweeper running every 60 seconds.
 
 ## 🚀 Running the Application
 

@@ -1,3 +1,3 @@
 """
-Models package for the AI Phone Scheduler application.
+Models package for the ShipStack Voice application.
 """
