@@ -239,32 +239,59 @@ ShipStack Voice integrates with Google Calendar to provide real-time availabilit
 
 ## 🚀 Running the Application
 
-### Start Backend API Server
-   ```bash
-# Activate virtual environment
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-   
-# Run FastAPI server
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+### Option A: Local Development with Docker (Recommended)
 
-### Start LiveKit Voice Agent Worker
-   ```bash
-# In a separate terminal
-python run_voice_worker.py
-```
+Run PostgreSQL, Redis, and FastAPI in Docker with **automatic live code reloading** (no image rebuilding required on code edits):
 
-### Start Frontend (Optional)
 ```bash
-cd frontend
-npm start
+# Start PostgreSQL, Redis, and FastAPI (with auto-reload on port 8001)
+docker compose -f docker-compose.dev.yml up
+
+# Or run in background
+docker compose -f docker-compose.dev.yml up -d
+```
+* **Auto-Migrations**: Automatically runs `alembic upgrade head` before starting the server.
+* **Live Reloading**: Any code edits in `app/` trigger an instant reload inside the container.
+* **Optional Voice Worker**: To run the LiveKit voice worker as well:
+  ```bash
+  docker compose -f docker-compose.dev.yml --profile voice up
+  ```
+
+### Start Frontend (in `appointment-setter-frontend`)
+
+The frontend is a pnpm monorepo. Run the platform shell locally:
+
+```bash
+cd ../appointment-setter-frontend
+pnpm install
+pnpm dev:platform-shell
+```
+* Runs on `http://localhost:3000` and automatically connects to the backend on `http://localhost:8001`.
+
+---
+
+### Option B: Native Python Development (Without Docker)
+
+```bash
+# 1. Ensure Postgres and Redis are running locally
+# 2. Activate virtual environment
+source .venv/bin/activate
+
+# 3. Apply database migrations
+alembic upgrade head
+
+# 4. Start FastAPI server
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 5. Start LiveKit Voice Worker (in a separate terminal)
+python run_voice_worker.py dev
 ```
 
 ### Access Points
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/health
-- **Frontend**: http://localhost:3000
+- **API (Docker Dev)**: http://localhost:8001
+- **API Docs**: http://localhost:8001/docs
+- **Health Check**: http://localhost:8001/api/v1/health
+- **Frontend Platform Shell**: http://localhost:3000
 
 ---
 

@@ -1,0 +1,111 @@
+services:
+  # -------------------------------------------------------------------
+  # PostgreSQL 16 Database
+  # -------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: appointment-setter-postgres-dev
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-appointment_setter}
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-appointment_setter}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # -------------------------------------------------------------------
+  # Redis 7 Cache & Locks
+  # -------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: appointment-setter-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-dev-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # -------------------------------------------------------------------
+  # FastAPI Server with Live Code Reload & Auto-Migrations
+  # -------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: appointment-setter-backend:dev
+    container_name: appointment-setter-backend-dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8001:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-appointment_setter}
+      CORS_ALLOW_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      # Live bind-mounts: Code changes take effect instantly without rebuilding
+      - ./app:/app/app:cached
+      - ./alembic:/app/alembic:cached
+      - ./alembic.ini:/app/alembic.ini:cached
+    # Auto-apply database migrations on startup, then run uvicorn in reload mode
+    command: >
+      sh -c "alembic upgrade head &&
+             python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------
+  # LiveKit Voice Worker (Optional: docker compose -f docker-compose.dev.yml --profile voice up)
+  # -------------------------------------------------------------------
+  voice-worker:
+    profiles: ["voice"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: appointment-setter-backend:dev
+    container_name: appointment-setter-voice-worker-dev
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-appointment_setter}
+    volumes:
+      - ./app:/app/app:cached
+    command: ["python", "run_voice_worker.py", "dev"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
+volumes:
+  postgres-dev-data:
+  redis-dev-data:
