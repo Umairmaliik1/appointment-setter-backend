@@ -1,23 +1,26 @@
 """
-Appointment service for managing appointments and email notifications using PostgreSQL.
+Appointment service for managing appointments, Google Calendar sync, and notifications.
 """
 
+from __future__ import annotations
+
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from app.api.v1.services.scheduling import SchedulingService
-from app.core.response_mappers import parse_iso_timestamp
+from app.core.datetime_utils import parse_to_utc_datetime, to_utc_iso_z
 from app.services.email.service import EmailService
+from app.services.google_calendar import google_calendar_service
 from app.services.store import store
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 
 class AppointmentService:
-    """Service class for appointment operations using PostgreSQL."""
+    """Service class for appointment operations using PostgreSQL and Google Calendar."""
 
     def __init__(self):
         """Initialize appointment service."""
@@ -38,15 +41,9 @@ class AppointmentService:
         call_id: Optional[str] = None,
         duration_minutes: int = 60,
         send_email: bool = True,
+        sync_calendar: bool = True,
     ) -> Optional[Dict[str, Any]]:
-        """Create a new appointment.
-
-        When `send_email` is True (default) the customer confirmation email
-        is sent as part of the call. Callers that need visibility into
-        email success/failure (e.g. the voice worker, which has to tell
-        the caller whether to expect an email) should pass `send_email=False`
-        and call `email_service.send_appointment_confirmation` themselves.
-        """
+        """Create a new appointment and queue Google Calendar sync in background."""
         try:
             # Validate appointment time
             is_valid, error_message = await self.scheduling_service.validate_appointment_time(
@@ -56,8 +53,22 @@ class AppointmentService:
             if not is_valid:
                 raise ValueError(error_message)
 
-            # Create appointment
+            utc_dt_str = to_utc_iso_z(appointment_datetime)
+            now_utc_str = to_utc_iso_z(datetime.now(timezone.utc))
+
             customer_org = await store.get_org_by_legacy_tenant_id(tenant_id, prefer_customer=True)
+
+            # Check if tenant has an active Google Calendar connection
+            cal_conn = None
+            if sync_calendar:
+                try:
+                    cal_conn = await store.get_calendar_connection(tenant_id)
+                except Exception as c_err:
+                    logger.warning("Error checking calendar connection for tenant %s: %s", tenant_id, c_err)
+
+            is_cal_active = bool(cal_conn and cal_conn.get("status") == "active")
+            initial_sync_status = "pending" if is_cal_active else "not_applicable"
+
             appointment_dict = {
                 "id": str(uuid.uuid4()),
                 "tenant_id": tenant_id,
@@ -69,29 +80,44 @@ class AppointmentService:
                 "customer_email": customer_email,
                 "service_type": service_type,
                 "service_address": service_address,
-                "appointment_datetime": appointment_datetime.isoformat(),
+                "appointment_datetime": utc_dt_str,
                 "duration_minutes": duration_minutes,
                 "service_details": service_details,
                 "status": "scheduled",
+                "calendar_event_id": None,
+                "calendar_sync_status": initial_sync_status,
                 "appointment_data": appointment_data or {},
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": now_utc_str,
+                "updated_at": now_utc_str,
             }
 
             appointment = await store.create_appointment(appointment_dict)
+            if not appointment:
+                return None
 
-            # Send confirmation email — opt-out for callers that own the
-            # email path themselves (the voice worker does, so it can report
-            # the actual delivery status back to the LLM).
+            # Confirmation email
             if send_email and customer_email:
                 await self.email_service.send_appointment_confirmation(
                     customer_email, customer_name, appointment_datetime, service_type, service_address
                 )
 
+            # Start background Google Calendar event creation if sync is enabled and calendar is active
+            if sync_calendar and is_cal_active:
+                try:
+                    asyncio.create_task(
+                        asyncio.shield(
+                            google_calendar_service.sync_appointment_event_with_retry(
+                                tenant_id, appointment
+                            )
+                        )
+                    )
+                except Exception as sync_err:
+                    logger.warning("Failed to start calendar sync task for %s: %s", appointment["id"], sync_err)
+
             return appointment
 
         except Exception as e:
-            logger.error(f"Error creating appointment: {e}", exc_info=True)
+            logger.error("Error creating appointment: %s", e, exc_info=True)
             return None
 
     async def get_appointment(self, appointment_id: str) -> Optional[Dict[str, Any]]:
@@ -108,26 +134,26 @@ class AppointmentService:
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """List appointments for a tenant with filters."""
-        # Get base appointments
         appointments = await store.list_appointments(tenant_id, limit, offset)
 
-        # Apply filters
         filtered_appointments = []
         for appointment in appointments:
-            # Status filter
             if status and appointment.get("status") != status:
                 continue
 
-            # Date filters
-            appointment_datetime = parse_iso_timestamp(appointment["appointment_datetime"])
-            if not appointment_datetime:
+            apt_dt = parse_to_utc_datetime(appointment.get("appointment_datetime"))
+            if not apt_dt:
                 continue
 
-            if start_date and appointment_datetime < start_date:
-                continue
+            if start_date:
+                start_utc = start_date if start_date.tzinfo else start_date.replace(tzinfo=timezone.utc)
+                if apt_dt < start_utc:
+                    continue
 
-            if end_date and appointment_datetime > end_date:
-                continue
+            if end_date:
+                end_utc = end_date if end_date.tzinfo else end_date.replace(tzinfo=timezone.utc)
+                if apt_dt > end_utc:
+                    continue
 
             filtered_appointments.append(appointment)
 
@@ -137,7 +163,10 @@ class AppointmentService:
         self, appointment_id: str, status: str, notes: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """Update appointment status."""
-        update_data = {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}
+        update_data = {
+            "status": status,
+            "updated_at": to_utc_iso_z(datetime.now(timezone.utc)),
+        }
 
         if notes:
             update_data["notes"] = notes
@@ -145,49 +174,69 @@ class AppointmentService:
         return await store.update_appointment(appointment_id, update_data)
 
     async def cancel_appointment(self, appointment_id: str, reason: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Cancel an appointment."""
+        """Cancel an appointment and delete its Google Calendar event."""
+        appointment = await self.get_appointment(appointment_id)
+        if not appointment:
+            return None
+
+        tenant_id = appointment.get("tenant_id")
+        event_id = appointment.get("calendar_event_id")
+
         update_data = {
             "status": "cancelled",
-            "cancelled_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "cancelled_at": to_utc_iso_z(datetime.now(timezone.utc)),
+            "updated_at": to_utc_iso_z(datetime.now(timezone.utc)),
         }
 
         if reason:
             update_data["cancellation_reason"] = reason
 
-        appointment = await store.update_appointment(appointment_id, update_data)
+        updated = await store.update_appointment(appointment_id, update_data)
+
+        # Delete from Google Calendar in background (shielded)
+        if tenant_id and event_id:
+            try:
+                asyncio.create_task(
+                    asyncio.shield(google_calendar_service.delete_event(tenant_id, event_id))
+                )
+            except Exception as del_err:
+                logger.warning("Failed to start Google Calendar delete event task: %s", del_err)
 
         # Send cancellation email if customer email exists
-        if appointment and appointment.get("customer_email"):
+        if updated and updated.get("customer_email"):
+            apt_dt = parse_to_utc_datetime(updated.get("appointment_datetime")) or datetime.now(timezone.utc)
             await self.email_service.send_appointment_cancellation(
-                appointment["customer_email"],
-                appointment["customer_name"],
-                parse_iso_timestamp(appointment["appointment_datetime"]) or datetime.now(timezone.utc),
+                updated["customer_email"],
+                updated["customer_name"],
+                apt_dt,
                 reason,
             )
 
-        return appointment
+        return updated
 
     async def reschedule_appointment(
         self, appointment_id: str, new_datetime: datetime, reason: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
-        """Reschedule an appointment."""
-        # Validate new time
+        """Reschedule an appointment and update its Google Calendar event."""
         appointment = await self.get_appointment(appointment_id)
         if not appointment:
             return None
 
+        tenant_id = appointment["tenant_id"]
+        duration = appointment.get("duration_minutes", 60)
+
         is_valid, error_message = await self.scheduling_service.validate_appointment_time(
-            appointment["tenant_id"], new_datetime, appointment.get("duration_minutes", 60)
+            tenant_id, new_datetime, duration
         )
 
         if not is_valid:
             raise ValueError(error_message)
 
+        utc_dt_str = to_utc_iso_z(new_datetime)
         update_data = {
-            "appointment_datetime": new_datetime.isoformat(),
+            "appointment_datetime": utc_dt_str,
             "status": "rescheduled",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": to_utc_iso_z(datetime.now(timezone.utc)),
         }
 
         if reason:
@@ -195,12 +244,38 @@ class AppointmentService:
 
         updated_appointment = await store.update_appointment(appointment_id, update_data)
 
+        # Update Google Calendar event in background (shielded)
+        event_id = updated_appointment.get("calendar_event_id")
+        if event_id:
+            try:
+                asyncio.create_task(
+                    asyncio.shield(
+                        google_calendar_service.update_event(
+                            tenant_id, event_id, updated_appointment
+                        )
+                    )
+                )
+            except Exception as patch_err:
+                logger.warning("Failed to start Google Calendar update event task: %s", patch_err)
+        else:
+            try:
+                asyncio.create_task(
+                    asyncio.shield(
+                        google_calendar_service.sync_appointment_event_with_retry(
+                            tenant_id, updated_appointment
+                        )
+                    )
+                )
+            except Exception as sync_err:
+                logger.warning("Failed to start calendar sync task on reschedule: %s", sync_err)
+
         # Send reschedule email if customer email exists
         if updated_appointment and updated_appointment.get("customer_email"):
+            apt_dt = parse_to_utc_datetime(updated_appointment.get("appointment_datetime")) or datetime.now(timezone.utc)
             await self.email_service.send_appointment_reschedule(
                 updated_appointment["customer_email"],
                 updated_appointment["customer_name"],
-                parse_iso_timestamp(updated_appointment["appointment_datetime"]) or datetime.now(timezone.utc),
+                apt_dt,
                 reason,
             )
 
@@ -212,8 +287,8 @@ class AppointmentService:
         """Mark appointment as completed."""
         update_data = {
             "status": "completed",
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": to_utc_iso_z(datetime.now(timezone.utc)),
+            "updated_at": to_utc_iso_z(datetime.now(timezone.utc)),
         }
 
         if completion_notes:
@@ -235,5 +310,4 @@ class AppointmentService:
         return await self.list_appointments(tenant_id=tenant_id, start_date=start_date, end_date=end_date, status="scheduled")
 
 
-# Global appointment service instance
 appointment_service = AppointmentService()

@@ -17,7 +17,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from livekit import agents
@@ -140,6 +140,123 @@ class VoiceAgent(Agent):
         self._job_ctx = job_ctx
         self._booking_completed = False  # idempotency guard for book_appointment
         self._lead_captured = False      # idempotency guard for capture_lead
+
+    @staticmethod
+    def _parse_date_input(date_str: str, default_date: date) -> date:
+        clean = (date_str or "").strip().lower()
+        if not clean or clean == "today":
+            return default_date
+        if clean == "tomorrow":
+            return default_date + timedelta(days=1)
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d", "%B %d, %Y", "%b %d, %Y", "%b %d", "%B %d"):
+            try:
+                dt = datetime.strptime(clean, fmt)
+                if dt.year == 1900:
+                    dt = dt.replace(year=default_date.year)
+                return dt.date()
+            except ValueError:
+                pass
+        try:
+            return datetime.fromisoformat(clean).date()
+        except Exception:
+            return default_date
+
+    # ------------------------------------------------------------------
+    # Tool: check calendar & working hours availability
+    # ------------------------------------------------------------------
+    @function_tool
+    async def check_availability(self, date: str, part_of_day: str = "any") -> str:
+        """Check availability and return up to 3 open appointment slots.
+
+        Use this whenever the caller asks for a time or before offering any appointment times.
+        Never offer a time you have not confirmed with check_availability.
+
+        Args:
+            date: The requested date, e.g. "tomorrow", "today", or "YYYY-MM-DD" (e.g. "2026-10-13").
+            part_of_day: "morning" (before 12 PM), "afternoon" (12 PM to 5 PM),
+                         "evening" (after 5 PM), or "any" (default).
+
+        Returns:
+            Up to 3 free time slots in plain words with ISO times, for example:
+            "Tuesday 10:00 AM (2026-10-13T10:00:00-05:00), Tuesday 11:30 AM (2026-10-13T11:30:00-05:00), Tuesday 2:00 PM (2026-10-13T14:00:00-05:00)"
+            If nothing is free that day, returns the next 3 free slots across following days.
+        """
+        if not self.tenant_id:
+            logger.warning("[AVAILABILITY] tenant_id missing on VoiceAgent")
+            return "Unable to check availability: missing tenant context."
+
+        from app.api.v1.services.scheduling import scheduling_service
+
+        tz = await scheduling_service._get_tenant_timezone(self.tenant_id)
+        now_local = datetime.now(tz)
+        target_date = self._parse_date_input(date, now_local.date())
+
+        try:
+            slots = await scheduling_service.generate_available_slots(
+                tenant_id=self.tenant_id,
+                start_date=target_date,
+                end_date=target_date + timedelta(days=7),
+            )
+        except Exception as exc:
+            logger.exception("[AVAILABILITY] generate_available_slots crashed: %s", exc)
+            return "Could not check calendar availability due to a temporary system error. Ask caller for their preferred time."
+
+        now_utc = datetime.now(timezone.utc)
+        valid_slots = [
+            s for s in slots
+            if s.is_available and s.start_time.astimezone(timezone.utc) > now_utc
+        ]
+
+        def matches_part_of_day(slot_time: datetime, pod: str) -> bool:
+            pod_clean = (pod or "any").strip().lower()
+            if pod_clean == "any":
+                return True
+            local_time = slot_time.astimezone(tz)
+            hour = local_time.hour
+            if pod_clean == "morning":
+                return hour < 12
+            if pod_clean == "afternoon":
+                return 12 <= hour < 17
+            if pod_clean == "evening":
+                return hour >= 17
+            return True
+
+        target_day_slots = [
+            s for s in valid_slots
+            if s.start_time.astimezone(tz).date() == target_date and matches_part_of_day(s.start_time, part_of_day)
+        ]
+
+        if not target_day_slots:
+            target_day_slots = [
+                s for s in valid_slots
+                if s.start_time.astimezone(tz).date() == target_date
+            ]
+
+        selected_slots = target_day_slots[:3]
+
+        if not selected_slots:
+            following_slots = [
+                s for s in valid_slots
+                if s.start_time.astimezone(tz).date() > target_date and matches_part_of_day(s.start_time, part_of_day)
+            ]
+            if not following_slots:
+                following_slots = [
+                    s for s in valid_slots
+                    if s.start_time.astimezone(tz).date() > target_date
+                ]
+            selected_slots = following_slots[:3]
+
+        if not selected_slots:
+            return f"Nothing is free for {target_date.isoformat()} or the following week. Please ask the caller for an alternative date."
+
+        formatted_slots = []
+        for s in selected_slots:
+            local_s = s.start_time.astimezone(tz)
+            readable = local_s.strftime("%A %I:%M %p").replace(" 0", " ")
+            iso_str = local_s.isoformat()
+            formatted_slots.append(f"{readable} ({iso_str})")
+
+        return f"Available slots: {', '.join(formatted_slots)}."
 
     # ------------------------------------------------------------------
     # Tool: book the appointment + send emails

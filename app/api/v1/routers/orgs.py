@@ -73,7 +73,7 @@ def _build_setup_password_url(token: str, invite_base_url: Optional[str]) -> str
     base = (invite_base_url or PLATFORM_APP_BASE_URL or "").strip().rstrip("/")
     if not base:
         base = "http://localhost:3000"
-    return f"{base}/mindrind/admin/setup-password?token={token}"
+    return f"{base}/setup-password?token={token}"
 
 
 def _is_platform_staff(current_user: Dict[str, Any]) -> bool:
@@ -197,7 +197,7 @@ async def _attach_partner_entitlements(org: Dict[str, Any]) -> Dict[str, Any]:
     partner_org_id = str(org.get("id", ""))
     entitlements = await _sync_partner_seat_usage(partner_org_id)
     enriched = dict(org)
-    enriched["appointment_setter_enabled"] = bool(entitlements.get("appointment_setter_enabled", False))
+    enriched["appointment_setter_enabled"] = bool(entitlements.get("appointment_setter_enabled", True))
     seat_limit = _as_positive_int(entitlements.get("seat_limit"), DEFAULT_PARTNER_SEAT_LIMIT)
     seat_usage = _as_positive_int(entitlements.get("seat_usage"), 0)
     enriched["seat_limit"] = seat_limit
@@ -310,10 +310,10 @@ async def create_org(
             await org_service.ensure_platform_org_exists()
             parent_org_id = PLATFORM_ORG_ID
         else:
-            if payload.parent_org_id != PLATFORM_ORG_ID:
+            if payload.parent_org_id not in (PLATFORM_ORG_ID, "mindrind-platform"):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="partner org must have parent_org_id set to mindrind-platform",
+                    detail=f"partner org must have parent_org_id set to {PLATFORM_ORG_ID}",
                 )
             parent_org_id = payload.parent_org_id
     elif payload.org_type == "customer":
@@ -361,14 +361,14 @@ async def create_org(
             await postgres_store.upsert_partner_entitlements(
                 org_id,
                 {
-                    "appointment_setter_enabled": False,
+                    "appointment_setter_enabled": True,
                     "seat_limit": DEFAULT_PARTNER_SEAT_LIMIT,
                     "seat_usage": 0,
                     "seat_remaining": DEFAULT_PARTNER_SEAT_LIMIT,
                     "over_seat_limit": False,
-                    "onboarding_status": "invited",
-                    "approved_by_user_id": None,
-                    "approval_notes": "Awaiting MindRind approval",
+                    "onboarding_status": "active",
+                    "approved_by_user_id": str(current_user.get("id", "")),
+                    "approval_notes": "Auto-approved",
                 },
             )
 
@@ -461,14 +461,14 @@ async def create_partner_with_owner(
         entitlements_record = await postgres_store.upsert_partner_entitlements(
             partner_org_id,
             {
-                "appointment_setter_enabled": False,
+                "appointment_setter_enabled": True,
                 "seat_limit": payload.seat_limit,
                 "seat_usage": 0,
                 "seat_remaining": payload.seat_limit,
                 "over_seat_limit": False,
-                "onboarding_status": "invited",
-                "approved_by_user_id": None,
-                "approval_notes": payload.approval_notes or "Awaiting MindRind approval",
+                "onboarding_status": "active",
+                "approved_by_user_id": str(current_user_id),
+                "approval_notes": payload.approval_notes or "Auto-approved",
             },
         )
 
@@ -521,7 +521,7 @@ async def create_partner_with_owner(
                 setup_password_url=setup_password_url,
                 login_url=login_url,
                 expires_in_hours=48,
-                platform_name="MindRind",
+                platform_name="Bookhatch AI",
             )
 
         response_payload = {
@@ -838,7 +838,7 @@ async def create_org_member(
             setup_password_url=setup_password_url,
             login_url=login_url,
             expires_in_hours=48,
-            platform_name="MindRind",
+            platform_name="Bookhatch AI",
         )
     created_record = await postgres_store.get_org_membership(org_id=org_id, user_id=str(new_user["id"]))
     if created_record:
@@ -893,7 +893,7 @@ async def resend_org_member_setup_invite(
         setup_password_url=setup_password_url,
         login_url=login_url,
         expires_in_hours=48,
-        platform_name="MindRind",
+        platform_name="Bookhatch AI",
     )
     await audit_service.log_event(
         actor=current_user,
@@ -922,7 +922,7 @@ async def update_partner_entitlements(
     payload: PartnerEntitlementsUpdateRequest,
     current_user: Dict[str, Any] = Depends(get_current_user_from_token),
 ):
-    """MindRind approval gate for partner app entitlements."""
+    """Bookhatch AI entitlements update for partner app."""
     if not _is_platform_staff(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only platform staff can update partner entitlements")
 

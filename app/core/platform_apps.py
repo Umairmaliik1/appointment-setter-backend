@@ -28,15 +28,15 @@ PLATFORM_APPS: List[Dict[str, str]] = [
         "default_route": "/app/chatbot-agents",
         "icon_key": CHATBOT_AGENTS_APP_ID,
         "description": "Launchers and embeds",
-        "status": "active",
+        "status": "inactive",
     },
     {
         "id": SMS_APP_ID,
         "slug": "sms",
-        "label": "SMS Outreach",
+        "label": "SMS & Reminders",
         "default_route": "/app/sms/dashboard",
         "icon_key": SMS_APP_ID,
-        "description": "Cold-SMS campaigns and inbox",
+        "description": "Call confirmations and reminders",
         "status": "active",
     },
     {
@@ -54,13 +54,13 @@ _PLATFORM_APP_IDS: Set[str] = {app["id"] for app in PLATFORM_APPS}
 
 
 def get_platform_apps() -> List[Dict[str, str]]:
-    """Return platform app catalog."""
-    return [dict(app) for app in PLATFORM_APPS]
+    """Return active platform app catalog."""
+    return [dict(app) for app in PLATFORM_APPS if app.get("status") == "active"]
 
 
 def get_platform_app_ids() -> List[str]:
-    """Return valid app IDs."""
-    return [app["id"] for app in PLATFORM_APPS]
+    """Return valid active app IDs."""
+    return [app["id"] for app in PLATFORM_APPS if app.get("status") == "active"]
 
 
 def normalize_allowed_app_ids(app_ids: Optional[Sequence[str]]) -> List[str]:

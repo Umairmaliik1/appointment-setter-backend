@@ -309,11 +309,11 @@ def _org_summary(org: Dict[str, Any]) -> PlatformOrgSummaryResponse:
 
 def _compute_branding(active_org: Optional[Dict[str, Any]], partner_org: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     fallback = {
-        "brand_name": "MindRind",
+        "brand_name": "Bookhatch AI",
         "logo_url": None,
         "primary_color": "#0f172a",
         "secondary_color": "#ffffff",
-        "accent_color": "#f59e0b",
+        "accent_color": "#6366f1",
     }
     if partner_org and isinstance(partner_org.get("branding"), dict):
         fallback.update({k: v for k, v in partner_org.get("branding", {}).items() if v is not None})
@@ -352,11 +352,10 @@ async def get_platform_bootstrap(current_user: Dict[str, Any] = Depends(get_curr
         partner_entitlements = await postgres_store.get_partner_entitlements(str(partner_org.get("id", "")))
 
     is_platform_scope = access_context.platform_scope
+    # Auto-approve Appointment Setter across all organizations
     appointment_enabled = True
-    if not is_platform_scope and partner_entitlements is not None:
-        appointment_enabled = bool(partner_entitlements.get("appointment_setter_enabled", False))
-    elif not is_platform_scope and partner_org:
-        appointment_enabled = False
+    if partner_entitlements is not None:
+        appointment_enabled = bool(partner_entitlements.get("appointment_setter_enabled", True))
 
     effective_allowed = list(allowed_app_ids)
     if not appointment_enabled:
@@ -833,7 +832,7 @@ async def set_active_org(
     if org_service.is_platform_staff(memberships) and payload.org_id != PLATFORM_ORG_ID:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Platform admins are fixed to MindRind org context",
+            detail="Platform admins are fixed to Bookhatch org context",
         )
 
     has_access = await org_service.user_can_access_org(current_user, payload.org_id)

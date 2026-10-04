@@ -1,12 +1,16 @@
-# AI Phone Scheduler - Appointment Setter
+# Bookhatch AI - Autonomous Voice AI & Appointment Platform
 
+> **Every call answered, Every job booked. Built by DAU Labs**  
+> Real-time conversational voice agents, automated phone scheduling, and multi-tenant operational infrastructure.
 
+---
 
 ## 🚀 Features
 
 ### Core Capabilities
 - **AI Voice Agents**: Powered by LiveKit Agents running Google's Gemini Live native-audio model (single-model VAD + STT + LLM + TTS)
 - **Phone Call Operation**: Twilio SIP integration for real inbound calls
+- **Google Calendar Sync**: Multi-tenant OAuth sync with Google Calendar. Voice agent queries real-time availability via `check_availability`, pushes bookings with deterministic idempotent event IDs, handles reschedules/cancellations, and features an automated background restart sweeper.
 - **Multi-Tenant Architecture**: Complete tenant isolation with dedicated configurations
 - **Appointment Management**: Full CRUD operations with scheduling and slot management
 - **Real-time Communication**: WebSocket-based voice interactions via LiveKit
@@ -203,51 +207,91 @@ AWS_REGION=us-east-1
 JWT_ALGORITHM=HS256
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
 JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# Google Calendar OAuth & Sync
+GOOGLE_OAUTH_CLIENT_ID=your_google_oauth_client_id_here
+GOOGLE_OAUTH_CLIENT_SECRET=your_google_oauth_client_secret_here
+GOOGLE_OAUTH_REDIRECT_URI=https://your-api-domain.com/api/v1/calendar/google/callback
+CALENDAR_SYNC_ENABLED=true
+PLATFORM_APP_BASE_URL=http://localhost:3000
 ```
 
-### PostgreSQL Service Account Setup
+### Google Calendar Sync Setup
 
-1. Go to PostgreSQL Console → Project Settings → Service Accounts
-2. Generate new private key (downloads JSON file)
-3. Extract values for `.env`:
-   ```json
-   {
-     "project_id": "your-project-id",
-     "private_key": "-----BEGIN PRIVATE KEY-----\n...",
-     "client_email": "your-service-account@..."
-   }
-   ```
+Bookhatch AI integrates with Google Calendar to provide real-time availability checks, automatic event creation with deterministic idempotent IDs, and resilient background synchronization.
 
----
+#### 1. Google Cloud Console Configuration
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials**.
+2. Create an **OAuth 2.0 Client ID** (Web application).
+3. Set **Authorized redirect URIs** to match `GOOGLE_OAUTH_REDIRECT_URI` (e.g., `https://your-api-domain.com/api/v1/calendar/google/callback` or `http://localhost:8000/api/v1/calendar/google/callback`).
+4. Enable the **Google Calendar API** in API Library.
+5. Scopes used:
+   - `https://www.googleapis.com/auth/calendar.freebusy` (query busy times)
+   - `https://www.googleapis.com/auth/calendar.events.owned` (manage booking events)
+   - `https://www.googleapis.com/auth/userinfo.email` (read connected account email)
+
+#### 2. Architecture & Reliability Highlights
+- **Conversational Availability Tool**: The voice agent uses `check_availability(date, part_of_day)` which calculates available times by intersecting business working hours, internal booked appointments, and Google Calendar `freeBusy` intervals (cached for 60s for low latency).
+- **Fresh Booking Check**: When a caller selects a time, `validate_appointment_time` executes with `skip_cache=True` against Google Calendar to avoid race-condition double bookings.
+- **Canonical Datetimes**: All stored appointments are normalized to canonical UTC ISO strings with `Z` (e.g. `2026-10-15T15:00:00Z`).
+- **Deterministic Idempotency**: Event IDs are derived deterministically from the appointment ID, treating HTTP 409 Conflict as success.
+- **Restart Recovery Sweeper**: If the server restarts during a sync, appointments marked `calendar_sync_status: "pending"` are automatically retried by the background sweeper running every 60 seconds.
 
 ## 🚀 Running the Application
 
-### Start Backend API Server
-   ```bash
-# Activate virtual environment
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-   
-# Run FastAPI server
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+### Option A: Local Development with Docker (Recommended)
 
-### Start LiveKit Voice Agent Worker
-   ```bash
-# In a separate terminal
-python run_voice_worker.py
-```
+Run PostgreSQL, Redis, and FastAPI in Docker with **automatic live code reloading** (no image rebuilding required on code edits):
 
-### Start Frontend (Optional)
 ```bash
-cd frontend
-npm start
+# Start PostgreSQL, Redis, and FastAPI (with auto-reload on port 8001)
+docker compose -f docker-compose.dev.yml up
+
+# Or run in background
+docker compose -f docker-compose.dev.yml up -d
+```
+* **Auto-Migrations**: Automatically runs `alembic upgrade head` before starting the server.
+* **Live Reloading**: Any code edits in `app/` trigger an instant reload inside the container.
+* **Optional Voice Worker**: To run the LiveKit voice worker as well:
+  ```bash
+  docker compose -f docker-compose.dev.yml --profile voice up
+  ```
+
+### Start Frontend (in `appointment-setter-frontend`)
+
+The frontend is a pnpm monorepo. Run the platform shell locally:
+
+```bash
+cd ../appointment-setter-frontend
+pnpm install
+pnpm dev:platform-shell
+```
+* Runs on `http://localhost:3000` and automatically connects to the backend on `http://localhost:8001`.
+
+---
+
+### Option B: Native Python Development (Without Docker)
+
+```bash
+# 1. Ensure Postgres and Redis are running locally
+# 2. Activate virtual environment
+source .venv/bin/activate
+
+# 3. Apply database migrations
+alembic upgrade head
+
+# 4. Start FastAPI server
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 5. Start LiveKit Voice Worker (in a separate terminal)
+python run_voice_worker.py dev
 ```
 
 ### Access Points
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/health
-- **Frontend**: http://localhost:3000
+- **API (Docker Dev)**: http://localhost:8001
+- **API Docs**: http://localhost:8001/docs
+- **Health Check**: http://localhost:8001/api/v1/health
+- **Frontend Platform Shell**: http://localhost:3000
 
 ---
 
